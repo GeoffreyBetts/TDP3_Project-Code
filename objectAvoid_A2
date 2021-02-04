@@ -1,0 +1,112 @@
+void func_start_A2 (struct objectSense* os, struct variables* vr, Timer* disTime);
+void func_trig_A2        (struct objectSense* os, Timer* disTime);
+void func_echoStart_A2   (struct objectSense* os, Timer* disTime);
+void func_echoStop_A2 (struct objectSense* os, struct variables* vr, Timer* disTime);
+void func_angleUpdate_A2 (struct objectSense* os, struct angularControl* ac, struct variables* vr);
+
+extern bool global_tickerA2, global_echoStartA2, global_echoStopA2;
+extern bool global_echoMeasureA2;
+
+////////////////////////////////////////////////////////////////////////////////
+
+void func_start_A2(struct objectSense* os,struct variables* vr,Timer* disTime) {
+    if(global_tickerA2 == true) { func_trig_A2(os, disTime); }
+            // Send trig signal to ultrasonic sensor
+    if(global_echoStartA2 == true) { func_echoStart_A2(os, disTime); }
+            // Start measuring echo input
+    if(global_echoStopA2 == true) { func_echoStop_A2(os, vr, disTime); }
+            // Determine distance
+    
+    if(disTime->read_us() > 500 + (os->distCheckA2 * 58) ) { // Result WILL be
+        global_echoMeasureA2 = false;                        // big, if 
+        global_tickerA2 = false;                             // passes this
+        os->actualTimeT = 580 + (os->distCheckA2 * 58);      // if statement
+        os->distA2 = os->actualTimeT / 58;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void func_trig_A2(struct objectSense* os, Timer* disTime) {
+        // Send trig signal to ultrasonic sensor*
+    global_tickerA2 = false;            
+    if(global_echoStartA2 == true) {
+        global_echoStartA2 = false;
+        global_echoStopA2 = false;
+    }
+    trigA2 = 1; // Start sending digital output signal
+    disTime->reset(); // Reset timer to 0
+    while (disTime->read_us() < 10 ) {}; // Wait 10 uS
+    trigA2 = 0; // Outputs a digitalOutput for 10 uS -ish
+}
+
+void func_echoStart_A2(struct objectSense* os, Timer* disTime) {
+        // Start measuring echo input*
+    os->actualTime1 = disTime->read_us();
+    global_echoStartA2 = false;
+}
+
+void func_echoStop_A2(struct objectSense* os,struct variables* vr,Timer* disTime){
+        // Determine distance*
+    if(os->avoidSetup == false) { // Calcuate reference value
+                                  // and used when rotating clockwise
+        os->actualTime2 = disTime->read_us(); // Time in microSeconds
+        os->actualTimeT = os->actualTime2 - os->actualTime1;
+        if(os->actualTimeT < 58) {os->actualTimeT = 10000000; }
+        os->distCheckA2 = os->actualTimeT / 58; // Distance in centimetres;
+        global_echoStopA2 = false;              // stored in var distCheckA2
+        global_echoMeasureA2 = false;   
+        if(os->distCheckA2 <= vr->distD1_AIM) { os->avoidSetup = true; }
+            // When this if statement is true; rover has turned 90 degrees
+    } else { // Find value when travelling around object
+        os->actualTime2 = disTime->read_us(); // Time in microSeconds
+        os->actualTimeT = os->actualTime2 - os->actualTime1;
+        if(os->actualTimeT < 58) {os->actualTimeT = 1000000000; }
+        os->distA2 = os->actualTimeT / 58; // Distance in centimetres;
+        global_echoStopA2 = false;         // stored in var distA2
+        global_echoMeasureA2 = false;   
+        os->angleUpdate = true; // Just realised this could be written in a
+    }                           // shorter way. Whoops.
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void func_angleUpdate_A2(struct objectSense* os,struct angularControl* ac,struct variables* vr) { 
+    os->angleUpdate = false; // Function to control rovers motion around object*
+    if(os->distA2 < os->distCheckA2) { // theta increase
+        if(ac->theta == -180) { ac->theta = ac->thetaStore; } // In actuality,
+        os->circleRight = true;                               // Sets theta == 0
+        if(os->circleLeft == false) { os->angleStrength += 1; }
+        if(os->circleLeft == true) { // Written in this terrible way,
+            os->angleStrength -= 1;  // to allow for calibration
+            os->circleLeft = false;
+        }
+        if(os->angleStrength < 100) { os->angleStrength = 100; }
+        if(os->angleStrength > 900) { os->angleStrength = 900; }
+        ac->theta = vr->circle_X * (os->angleStrength / 10);
+        if(ac->theta > 0) {ac->theta = 0; } 
+        os->angleStrength = 1;
+
+    } else if(os->distA2 > os->distCheckA2) { //theta decrease
+        if(ac->theta == -180) { ac->theta = ac->thetaStore; }
+        os->circleLeft = true;
+        if(os->circleRight == false) { os->angleStrength += 1; }
+        if(os->circleRight == true) {
+            os->angleStrength -= 1; 
+            os->circleRight = false;
+        }
+        if(os->angleStrength <   5) { os->angleStrength =   5; }
+        if(os->angleStrength >  45) { os->angleStrength =  45; }
+        ac->theta = -(100 - (os->angleStrength / 0.5));
+        if(ac->theta < -90) {ac->theta = -90; }
+
+    } else { //Do nothing, cause moving correctly
+        ac->theta = 0;
+        os->circleRight = false;
+        os->circleLeft = false;
+        os->angleStrength = 1;
+    }
+
+}
+
+////////////////////////////////////////////////////////////////////////////////

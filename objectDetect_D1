@@ -1,0 +1,53 @@
+void func_start_D1     (struct objectSense* os, Timer* disTime);
+void func_trig_D1      (struct objectSense* os, Timer* disTime);
+void func_echoStart_D1 (struct objectSense* os, Timer* disTime);
+void func_echoStop_D1  (struct objectSense* os, Timer* disTime);
+
+
+extern bool global_tickerD1, global_echoStartD1, global_echoStopD1, global_echoMeasureD1;
+
+////////////////////////////////////////////////////////////////////////////////
+
+void func_start_D1(struct objectSense* os, struct angularControl* ac, Timer* disTime) {
+    if(global_tickerD1 == true) { func_trig_D1(os, disTime); } 
+        // Send trig signal to ultrasonic sensor
+    if(global_echoStartD1 == true) { func_echoStart_D1(os, disTime); }
+        // Start measuring echo input
+    if(global_echoStopD1 == true) { func_echoStop_D1(os, disTime); }
+        // Determine distance
+    if(disTime->read_us() > 3800) {   // If takes longer 1500us, result is too
+        global_echoMeasureD1 = false; // long. Reset flags
+        global_tickerD1      = false;
+        os->actualTimeT = 3800;
+        os->distD1 = os->actualTimeT / 58; //Distance in centimeters
+    } //If takes longer than 3800 uS, we know the result will be crap
+
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void func_trig_D1 (struct objectSense* os, Timer* disTime) {
+    global_tickerD1 = false;
+    if(global_echoStartD1 == true) {
+        global_echoStartD1 = false;
+        global_echoStopD1 = false;
+    }
+    trigD1 = 1; //Start sending digital output signal
+    disTime->reset(); //Reset timer to 0
+    while (disTime->read_us() < 10 ) {}; //Wait 10 uS
+    trigD1 = 0; //Outputs a digitalOutput for 10 uS -ish
+}
+
+void func_echoStart_D1 (struct objectSense* os, Timer* disTime) {
+    os->actualTime1 = disTime->read_us();
+    global_echoStartD1 = false;
+}
+
+void func_echoStop_D1 (struct objectSense* os, Timer* disTime) {
+    os->actualTime2 = disTime->read_us(); //time in microSeconds
+    os->actualTimeT = os->actualTime2 - os->actualTime1;
+    if(os->actualTimeT <= 58) {os->actualTimeT = 3800; }
+    os->distD1 = os->actualTimeT / 58; //Distance in centimeters
+    global_echoStopD1 = false;
+    global_echoMeasureD1 = false;
+}
